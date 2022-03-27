@@ -89,7 +89,7 @@ def web():
     # Make folder picker dialog appear on top of other windows
     root.wm_attributes('-topmost', 1)
 
-    clicked = st.button('Folder Picker')
+    clicked = st.button('Selecionar pasta e gerar planilha')
     if clicked:
         dirname = st.text_input('Selected folder:',
                                 filedialog.askdirectory(master=root),
