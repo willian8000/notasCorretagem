@@ -13,7 +13,7 @@ import warnings
 warnings.filterwarnings("ignore")
 pandas.set_option('display.max_columns', None)
 
-def get_PDF(dirname):
+def get_all_PDF(dirname):
     list_pdf = []
     for root, directories, files in os.walk(dirname):
         root_excel = root
@@ -21,12 +21,38 @@ def get_PDF(dirname):
             list_pdf.append(root + "/" + name)
     return list_pdf, root_excel
 
-def reading_pdf(list_pdf, root):
-    movimetacoes = []
-    for file in list_pdf:
-        print(file)
-        data = tabula.read_pdf(file, multiple_tables=True, pages='all', stream=True, guess=False)
-        df = data[0]
+def get_notas_by_page(data):
+    nota_paginas = {}
+    for num_pagina in range(0, len(data)):
+        df = data[num_pagina]
+
+        if not df[df['A'].str.contains('(nota folha).*(data pregao)', case=True, na=False, flags=re.IGNORECASE,
+                                       regex=True)].index.empty:
+            idx = df[df['A'].str.contains('(nota folha).*(data pregao)', case=True, na=False, flags=re.IGNORECASE,
+                                          regex=True)].index[0] + 1
+        elif not df[df['A'].str.contains('(data pregao).*(nota)', case=True, na=False, flags=re.IGNORECASE,
+                                         regex=True)].index.empty:
+            idx = df[df['A'].str.contains('(data pregao).*(nota)', case=True, na=False, flags=re.IGNORECASE,
+                                          regex=True)].index[0]
+        elif not df[df['A'].str.contains('(numero da nota).*(data pregao)', case=True, na=False, flags=re.IGNORECASE,
+                                         regex=True)].index.empty:
+            idx = df[df['A'].str.contains('(numero da nota).*(data pregao)', case=True, na=False, flags=re.IGNORECASE,
+                                          regex=True)].index[0] + 1
+
+        data_nota, nr_nota = get_nota_data(str(df.iloc[idx]['A']))
+
+        if nr_nota not in nota_paginas:
+            nota_paginas[nr_nota] = {"data_nota": data_nota, "paginas": [num_pagina]}
+        else:
+            nota_paginas[nr_nota]["paginas"].append(num_pagina)
+
+    return nota_paginas
+
+def normalizar_dataframe(data, root, debug=False):
+    data_out = []
+    for num_pagina in range(0, len(data)):
+        df = data[num_pagina]
+
         df.fillna(' ', inplace=True)
 
         for i, column in enumerate(df.columns):
@@ -38,88 +64,109 @@ def reading_pdf(list_pdf, root):
 
         df.columns = ['A']
         df['A'] = df['A'].apply(unidecode)
-        df.to_csv(rf'{root}\pandas.txt', header=None, index=None, sep=' ', mode='a')
 
-        # EMOLULMENTOS
-        if not df[df['A'].str.contains('(diversas emolumentos)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index.empty:
-            idx_emolumentos = df[df['A'].str.contains('(diversas emolumentos)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index[0]
-        elif not df[df['A'].str.contains('(emolumentos\s*\-*[0-9]+,[0-9]+\s+D$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index.empty:
-            idx_emolumentos = df[df['A'].str.contains('(emolumentos\s*\-*[0-9]+,[0-9]+\s+D$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index[0]
+        data_out.append(df)
 
-        try:
-            emolumentos = get_emolumentos(str(df.iloc[idx_emolumentos]['A']))
-        except:
-            emolumentos = None
+        if debug:
+            print(df)
+            df.to_csv(rf'{root}\pandas.txt', header=None, index=None, sep=' ', mode='a')
 
-        # TAXA DE REGISTRO
-        if not df[df['A'].str.contains('(registro\s*\-*[0-9]+,[0-9]+\s+D$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index.empty:
-            idx_taxa_registro = df[df['A'].str.contains('(registro\s*\-*[0-9]+,[0-9]+\s+D$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index[0]
-        elif not df[df['A'].str.contains('(registro\(3\)\s*\-*[0-9]+,[0-9]+\s+D$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index.empty:
-            idx_taxa_registro = df[df['A'].str.contains('(registro\(3\)\s*\-*[0-9]+,[0-9]+\s+D$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index[0]
-        elif not df[df['A'].str.contains('(registro\s*\-*[0-9]+,[0-9]+$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index.empty:
-            idx_taxa_registro = df[df['A'].str.contains('(registro\s*\-*[0-9]+,[0-9]+$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index[0]
+    return data_out
 
-        try:
-            taxa_registro = get_taxa_registro(str(df.iloc[idx_taxa_registro]['A']))
-        except:
-            taxa_registro = None
+def reading_pdf(list_pdf, root):
+    movimetacoes = []
+    for file in list_pdf:
+        print(file)
+        data = tabula.read_pdf(file, multiple_tables=True, pages='all', stream=True, guess=False)
 
-        # TAXA DE LIQUIDACAO
-        if not df[df['A'].str.contains('(taxa de liquidacao\s*\-*[0-9]+,[0-9]+\s+D$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index.empty:
-            idx_taxa_liquidacao = df[df['A'].str.contains('(taxa de liquidacao\s*\-*[0-9]+,[0-9]+\s+D$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index[0]
-        elif not df[df['A'].str.contains('(taxa de liquidacao\(2\)\s*\-*[0-9]+,[0-9]+\s+D$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index.empty:
-            idx_taxa_liquidacao = df[df['A'].str.contains('(taxa de liquidacao\(2\)\s*\-*[0-9]+,[0-9]+\s+D$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index[0]
-        elif not df[df['A'].str.contains('(taxa de liquidacao\s*\-*[0-9]+,[0-9]+$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index.empty:
-            idx_taxa_liquidacao = df[df['A'].str.contains('(taxa de liquidacao\s*\-*[0-9]+,[0-9]+$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index[0]
+        data = normalizar_dataframe(data, root)
+        notas_por_pagina = get_notas_by_page(data)
 
-        try:
-            taxa_liquidacao = get_taxa_liquidacao(str(df.iloc[idx_taxa_liquidacao]['A']))
-        except:
-            taxa_liquidacao = None
 
-        # ISS
-        if not df[df['A'].str.contains('(ISS\s*\(SAO\s*PAULO\))', case=True, na=False, flags=re.IGNORECASE, regex=True)].index.empty:
-            idx_iss = df[df['A'].str.contains('(ISS\s*\(SAO\s*PAULO\))', case=True, na=False, flags=re.IGNORECASE, regex=True)].index[0]
-        elif not df[df['A'].str.contains('(impostos\s*\-*[0-9]+,[0-9]+\s*$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index.empty:
-            idx_iss = df[df['A'].str.contains('(impostos\s*\-*[0-9]+,[0-9]+\s*$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index[0]
-        elif not df[df['A'].str.contains('(impostos\s*\-*[0-9]+,[0-9]+\s+D$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index.empty:
-            idx_iss = df[df['A'].str.contains('(impostos\s*\-*[0-9]+,[0-9]+\s+D$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index[0]
-        elif not df[df['A'].str.contains('(ISS\s*\-*[0-9]+,[0-9]+\s+D$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index.empty:
-            idx_iss = df[df['A'].str.contains('(ISS\s*\-*[0-9]+,[0-9]+\s+D$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index[0]
+        for nota in notas_por_pagina:
+            nr_nota = nota
+            data_nota = notas_por_pagina[nota]["data_nota"]
 
-        try:
-            iss = get_iss(str(df.iloc[idx_iss]['A']))
-        except:
-            iss = None
+            print(nr_nota)
+            idx_movimentacao = []
+            df_movimentacao = []
 
-        # CORRETAGEM
-        if not df[df['A'].str.contains('(corretagem\s*\-*[0-9]+,[0-9]+$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index.empty:
-            idx_corretagem = df[df['A'].str.contains('(corretagem\s*\-*[0-9]+,[0-9]+$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index[0]
-        elif not df[df['A'].str.contains('(taxa\soperacional\s*\-*[0-9]+,[0-9]+\s+D$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index.empty:
-            idx_corretagem = df[df['A'].str.contains('(taxa\soperacional\s*\-*[0-9]+,[0-9]+\s+D$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index[0]
-        elif not df[df['A'].str.contains('(corretagem\s*\-*[0-9]+,[0-9]+\s+D$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index.empty:
-            idx_corretagem = df[df['A'].str.contains('(corretagem\s*\-*[0-9]+,[0-9]+\s+D$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index[0]
+            for pagina in notas_por_pagina[nota]["paginas"]:
+                df = data[pagina]
 
-        try:
-            corretagem = get_corretagem(str(df.iloc[idx_corretagem]['A']))
-        except:
-            corretagem = None
+                # EMOLULMENTOS
+                if not df[df['A'].str.contains('(diversas emolumentos)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index.empty:
+                    idx_emolumentos = df[df['A'].str.contains('(diversas emolumentos)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index[0]
+                elif not df[df['A'].str.contains('(emolumentos\s*\-*[0-9]+,[0-9]+\s+D$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index.empty:
+                    idx_emolumentos = df[df['A'].str.contains('(emolumentos\s*\-*[0-9]+,[0-9]+\s+D$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index[0]
 
-        if not df[df['A'].str.contains('(nota folha).*(data pregao)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index.empty:
-            idx = df[df['A'].str.contains('(nota folha).*(data pregao)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index[0] + 1
-        elif not df[df['A'].str.contains('(data pregao).*(nota)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index.empty:
-            idx = df[df['A'].str.contains('(data pregao).*(nota)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index[0]
-        elif not df[df['A'].str.contains('(numero da nota).*(data pregao)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index.empty:
-            idx = df[df['A'].str.contains('(numero da nota).*(data pregao)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index[0] + 1
+                try:
+                    emolumentos = get_emolumentos(str(df.iloc[idx_emolumentos]['A']))
+                except:
+                    emolumentos = None
 
-        data_nota, nr_nota = get_nota_data(str(df.iloc[idx]['A']))
+                # TAXA DE REGISTRO
+                if not df[df['A'].str.contains('(registro\s*\-*[0-9]+,[0-9]+\s+D$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index.empty:
+                    idx_taxa_registro = df[df['A'].str.contains('(registro\s*\-*[0-9]+,[0-9]+\s+D$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index[0]
+                elif not df[df['A'].str.contains('(registro\(3\)\s*\-*[0-9]+,[0-9]+\s+D$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index.empty:
+                    idx_taxa_registro = df[df['A'].str.contains('(registro\(3\)\s*\-*[0-9]+,[0-9]+\s+D$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index[0]
+                elif not df[df['A'].str.contains('(registro\s*\-*[0-9]+,[0-9]+$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index.empty:
+                    idx_taxa_registro = df[df['A'].str.contains('(registro\s*\-*[0-9]+,[0-9]+$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index[0]
 
-        idx_movimentacao = list(df[df['A'].str.contains('(BOVESPA) [C|V]+', case=False, na=False, flags=re.IGNORECASE, regex=True)].index)
-        movimetacoes += get_movimentacao(df.iloc[idx_movimentacao]['A'], data_nota, nr_nota, emolumentos, taxa_registro, taxa_liquidacao, iss, corretagem)
+                try:
+                    taxa_registro = get_taxa_registro(str(df.iloc[idx_taxa_registro]['A']))
+                except:
+                    taxa_registro = None
+
+                # TAXA DE LIQUIDACAO
+                if not df[df['A'].str.contains('(taxa de liquidacao\s*\-*[0-9]+,[0-9]+\s+D$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index.empty:
+                    idx_taxa_liquidacao = df[df['A'].str.contains('(taxa de liquidacao\s*\-*[0-9]+,[0-9]+\s+D$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index[0]
+                elif not df[df['A'].str.contains('(taxa de liquidacao\(2\)\s*\-*[0-9]+,[0-9]+\s+D$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index.empty:
+                    idx_taxa_liquidacao = df[df['A'].str.contains('(taxa de liquidacao\(2\)\s*\-*[0-9]+,[0-9]+\s+D$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index[0]
+                elif not df[df['A'].str.contains('(taxa de liquidacao\s*\-*[0-9]+,[0-9]+$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index.empty:
+                    idx_taxa_liquidacao = df[df['A'].str.contains('(taxa de liquidacao\s*\-*[0-9]+,[0-9]+$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index[0]
+
+                try:
+                    taxa_liquidacao = get_taxa_liquidacao(str(df.iloc[idx_taxa_liquidacao]['A']))
+                except:
+                    taxa_liquidacao = None
+
+                # ISS
+                if not df[df['A'].str.contains('(ISS\s*\(SAO\s*PAULO\))', case=True, na=False, flags=re.IGNORECASE, regex=True)].index.empty:
+                    idx_iss = df[df['A'].str.contains('(ISS\s*\(SAO\s*PAULO\))', case=True, na=False, flags=re.IGNORECASE, regex=True)].index[0]
+                elif not df[df['A'].str.contains('(impostos\s*\-*[0-9]+,[0-9]+\s*$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index.empty:
+                    idx_iss = df[df['A'].str.contains('(impostos\s*\-*[0-9]+,[0-9]+\s*$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index[0]
+                elif not df[df['A'].str.contains('(impostos\s*\-*[0-9]+,[0-9]+\s+D$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index.empty:
+                    idx_iss = df[df['A'].str.contains('(impostos\s*\-*[0-9]+,[0-9]+\s+D$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index[0]
+                elif not df[df['A'].str.contains('(ISS\s*\-*[0-9]+,[0-9]+\s+D$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index.empty:
+                    idx_iss = df[df['A'].str.contains('(ISS\s*\-*[0-9]+,[0-9]+\s+D$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index[0]
+
+                try:
+                    iss = get_iss(str(df.iloc[idx_iss]['A']))
+                except:
+                    iss = None
+
+                # CORRETAGEM
+                if not df[df['A'].str.contains('(corretagem\s*\-*[0-9]+,[0-9]+$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index.empty:
+                    idx_corretagem = df[df['A'].str.contains('(corretagem\s*\-*[0-9]+,[0-9]+$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index[0]
+                elif not df[df['A'].str.contains('(taxa\soperacional\s*\-*[0-9]+,[0-9]+\s+D$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index.empty:
+                    idx_corretagem = df[df['A'].str.contains('(taxa\soperacional\s*\-*[0-9]+,[0-9]+\s+D$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index[0]
+                elif not df[df['A'].str.contains('(corretagem\s*\-*[0-9]+,[0-9]+\s+D$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index.empty:
+                    idx_corretagem = df[df['A'].str.contains('(corretagem\s*\-*[0-9]+,[0-9]+\s+D$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index[0]
+
+                try:
+                    corretagem = get_corretagem(str(df.iloc[idx_corretagem]['A']))
+                except:
+                    corretagem = None
+
+                idx_movimentacao = list(df[df['A'].str.contains('(BOVESPA) [C|V]+', case=False, na=False, flags=re.IGNORECASE, regex=True)].index)
+                df_movimentacao += list(df.iloc[idx_movimentacao]['A'])
+
+            movimetacoes += get_movimentacao(df_movimentacao, data_nota, nr_nota, emolumentos, taxa_registro, taxa_liquidacao, iss, corretagem)
 
     movimetacoes = pandas.DataFrame(movimetacoes).sort_values(["data compra/venda", "SIGLA"])
     print('   Gerando arquivo..')
-    movimetacoes.to_excel(root + "/" + 'notas_corretagem.xlsx', index=False)
+    movimetacoes.to_excel(root + "/" + 'notas_corretagem.xlsx', index=False, sheet_name="NOTAS")
 
 def get_movimentacao(movimentacoes, data_nota, nr_nota, emolumentos, taxa_registro, taxa_liquidacao, iss, corretagem):
     valores_movimentacoes = []
@@ -159,9 +206,9 @@ def get_movimentacao(movimentacoes, data_nota, nr_nota, emolumentos, taxa_regist
         for word in ['[0-9]+,[0-9]+', 'ON/s+', '/sD$']:
             sigla = re.sub(word, '', sigla, flags=re.IGNORECASE).strip()
 
-        quantidade = float(quantidade.replace(",", ".").strip())
-        valor_unidade = float(valor_unidade.replace(",", ".").strip())
-        valor_total_mov = float(valor_total_mov.replace(",", ".").strip())
+        quantidade = float(str(quantidade).replace(",", ".").strip())
+        valor_unidade = float(str(valor_unidade).replace(",", ".").strip())
+        valor_total_mov = float(str(valor_total_mov).replace(",", ".").strip())
         emolumentos = float(str(emolumentos).replace(",", ".").strip()) if emolumentos is not None else None
         taxa_registro = float(str(taxa_registro).replace(",", ".").strip()) if taxa_registro is not None else None
         taxa_liquidacao = float(str(taxa_liquidacao).replace(",", ".").strip()) if taxa_liquidacao is not None else None
@@ -298,7 +345,7 @@ def web():
         dirname = st.text_input('Selected folder:',
                                 filedialog.askdirectory(master=root),
                                 disabled=True)
-        mylist, root = get_PDF(dirname)
+        mylist, root = get_all_PDF(dirname)
         reading_pdf(mylist, root)
         st.success('Arquivo gerado com sucesso')
 
