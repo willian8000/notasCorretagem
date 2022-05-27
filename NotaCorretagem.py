@@ -26,6 +26,8 @@ def get_notas_by_page(data):
     for num_pagina in range(0, len(data)):
         df = data[num_pagina]
 
+        print(df)
+
         if not df[df['A'].str.contains('(nota folha).*(data pregao)', case=True, na=False, flags=re.IGNORECASE,
                                        regex=True)].index.empty:
             idx = df[df['A'].str.contains('(nota folha).*(data pregao)', case=True, na=False, flags=re.IGNORECASE,
@@ -38,7 +40,12 @@ def get_notas_by_page(data):
                                          regex=True)].index.empty:
             idx = df[df['A'].str.contains('(numero da nota).*(data pregao)', case=True, na=False, flags=re.IGNORECASE,
                                           regex=True)].index[0] + 1
+        elif not df[df['A'].str.contains('([0-9]*\.?[0-9]*)\s\d\s([0-9]+\/[0-9]+\/[0-9]+)', case=True, na=False, flags=re.IGNORECASE,
+                                         regex=True)].index.empty:
+            idx = df[df['A'].str.contains('([0-9]*\.?[0-9]*)\s\d\s([0-9]+\/[0-9]+\/[0-9]+)', case=True, na=False, flags=re.IGNORECASE,
+                                          regex=True)].index[0]
 
+        print(idx)
         data_nota, nr_nota = get_nota_data(str(df.iloc[idx]['A']))
 
         if nr_nota not in nota_paginas:
@@ -317,7 +324,7 @@ def get_corretagem(v):
     return corretagem
 
 def get_nota_data(v):
-    # print(v)
+    print(v)
     for word in ['pregao', 'data', 'nota', 'no', '\:', 'folha', '\|', '1-BOVESPA', 'BOVESPA', '(NM)', 'VISTA',
                  '[C|D]$', 'opcao de [a-z]+', '[a-z]*#', '(VVAR)(?![A-Z0-9])', 'ON/s*[0-9]+,[0-9]+', '/sD/s']:
         v = re.sub(word, '', v, flags=re.IGNORECASE).strip()
