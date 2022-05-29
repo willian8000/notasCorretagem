@@ -12,6 +12,7 @@ import warnings
 
 warnings.filterwarnings("ignore")
 pandas.set_option('display.max_columns', None)
+pandas.options.display.max_colwidth = 100
 
 def get_all_PDF(dirname):
     list_pdf = []
@@ -44,8 +45,12 @@ def get_notas_by_page(data):
                                          regex=True)].index.empty:
             idx = df[df['A'].str.contains('([0-9]*\.?[0-9]*)\s\d\s([0-9]+\/[0-9]+\/[0-9]+)', case=True, na=False, flags=re.IGNORECASE,
                                           regex=True)].index[0]
+        elif not df[df['A'].str.contains('([0-9]*\.?[0-9]*)\s\d\.\d\s([0-9]+\/[0-9]+\/[0-9]+)', case=True, na=False, flags=re.IGNORECASE,
+                                         regex=True)].index.empty:
+            idx = df[df['A'].str.contains('([0-9]*\.?[0-9]*)\s\d\.\d\s([0-9]+\/[0-9]+\/[0-9]+)', case=True, na=False, flags=re.IGNORECASE,
+                                          regex=True)].index[0]
 
-        print(idx)
+        # print(idx)
         data_nota, nr_nota = get_nota_data(str(df.iloc[idx]['A']))
 
         if nr_nota not in nota_paginas:
@@ -66,7 +71,8 @@ def normalizar_dataframe(data, root, debug=False):
             if i == 0:
                 anchor = column
             else:
-                df[anchor] += ' ' + df[column]
+                # print(df[anchor], df[column], '------------->', column)
+                df[anchor] += ' ' + df[column].astype(str)
                 df.drop(columns=column, inplace=True)
 
         df.columns = ['A']
@@ -86,6 +92,7 @@ def reading_pdf(list_pdf, root):
         print(file)
         data = tabula.read_pdf(file, multiple_tables=True, pages='all', stream=True, guess=False)
 
+        # print(data)
         data = normalizar_dataframe(data, root)
         notas_por_pagina = get_notas_by_page(data)
 
@@ -139,8 +146,8 @@ def reading_pdf(list_pdf, root):
                     taxa_liquidacao = None
 
                 # ISS
-                if not df[df['A'].str.contains('(ISS\s*\(SAO\s*PAULO\))', case=True, na=False, flags=re.IGNORECASE, regex=True)].index.empty:
-                    idx_iss = df[df['A'].str.contains('(ISS\s*\(SAO\s*PAULO\))', case=True, na=False, flags=re.IGNORECASE, regex=True)].index[0]
+                if not df[df['A'].str.contains('(ISS\s*\(\s*SAO\s*PAULO\s*\)\s*)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index.empty:
+                    idx_iss = df[df['A'].str.contains('(ISS\s*\(\s*SAO\s*PAULO\s*\)\s*)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index[0]
                 elif not df[df['A'].str.contains('(impostos\s*\-*[0-9]+,[0-9]+\s*$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index.empty:
                     idx_iss = df[df['A'].str.contains('(impostos\s*\-*[0-9]+,[0-9]+\s*$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index[0]
                 elif not df[df['A'].str.contains('(impostos\s*\-*[0-9]+,[0-9]+\s+D$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index.empty:
@@ -160,6 +167,8 @@ def reading_pdf(list_pdf, root):
                     idx_corretagem = df[df['A'].str.contains('(taxa\soperacional\s*\-*[0-9]+,[0-9]+\s+D$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index[0]
                 elif not df[df['A'].str.contains('(corretagem\s*\-*[0-9]+,[0-9]+\s+D$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index.empty:
                     idx_corretagem = df[df['A'].str.contains('(corretagem\s*\-*[0-9]+,[0-9]+\s+D$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index[0]
+                elif not df[df['A'].str.contains('(Clearing\s*\-*[0-9]+,[0-9]+\s+D$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index.empty:
+                    idx_corretagem = df[df['A'].str.contains('(Clearing\s*\-*[0-9]+,[0-9]+\s+D$)', case=True, na=False, flags=re.IGNORECASE, regex=True)].index[0]
 
                 try:
                     corretagem = get_corretagem(str(df.iloc[idx_corretagem]['A']))
@@ -326,7 +335,8 @@ def get_corretagem(v):
 def get_nota_data(v):
     print(v)
     for word in ['pregao', 'data', 'nota', 'no', '\:', 'folha', '\|', '1-BOVESPA', 'BOVESPA', '(NM)', 'VISTA',
-                 '[C|D]$', 'opcao de [a-z]+', '[a-z]*#', '(VVAR)(?![A-Z0-9])', 'ON/s*[0-9]+,[0-9]+', '/sD/s']:
+                 '[C|D]$', 'opcao de [a-z]+', '[a-z]*#', '(VVAR)(?![A-Z0-9])', 'ON/s*[0-9]+,[0-9]+', '/sD/s',
+                 'Pav. 14, 15 - Torre A2 Jequitiba - Condominio Parque da Cidade']:
         v = re.sub(word, '', v, flags=re.IGNORECASE).strip()
 
     if match := re.search('([0-9]+/[0-9]+/[0-9]+)', v, flags=re.IGNORECASE):
